@@ -1,15 +1,27 @@
 // V3 Image Editor - Tool Settings Panel
+// Added Crop tool settings
 
-import React from 'react';
+import React, { useState } from 'react';
 import { useEditor } from '@/contexts/EditorContext';
 import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { Wand2, Paintbrush, Eraser } from 'lucide-react';
+import { Wand2, Paintbrush, Eraser, Crop } from 'lucide-react';
+import { CropTool } from './CropTool';
+import { Rectangle } from '@/types/editor';
+import { toast } from 'sonner';
 
 export function ToolSettingsPanel() {
   const { state, updateToolSettings } = useEditor();
   const { activeTool, toolSettings } = state;
+
+  const handleCropApply = (bounds: Rectangle) => {
+    toast.success(`Canvas cropped to ${bounds.width}×${bounds.height}`);
+  };
+
+  const handleCropCancel = () => {
+    toast.info('Crop cancelled');
+  };
 
   return (
     <div className="flex flex-col bg-panel-bg border-b border-panel-border">
@@ -46,6 +58,17 @@ export function ToolSettingsPanel() {
           }
           isEraser
         />
+      )}
+
+      {activeTool === 'rectangle-select' && (
+        <CropTool onApply={handleCropApply} onCancel={handleCropCancel} />
+      )}
+
+      {/* Default panel for tools without settings */}
+      {!['magic-wand', 'brush', 'eraser', 'rectangle-select'].includes(activeTool) && (
+        <div className="p-4 text-sm text-muted-foreground">
+          <p className="text-center">Select a tool to see options</p>
+        </div>
       )}
     </div>
   );
@@ -133,7 +156,7 @@ function MagicWandSettings({ settings, onChange }: MagicWandSettingsProps) {
       </div>
 
       {/* Hint */}
-      <div className="pt-2 text-2xs text-muted-foreground/70">
+      <div className="pt-2 text-2xs text-muted-foreground/70 space-y-0.5">
         <p>• Click to select similar colors</p>
         <p>• Alt+click to extract to new layer</p>
         <p>• Scroll to adjust tolerance</p>
@@ -238,7 +261,8 @@ function BrushSettings({ settings, onChange, isEraser }: BrushSettingsProps) {
       {!isEraser && (
         <div className="flex items-center gap-3 pt-2">
           <Label className="text-xs">Color</Label>
-          <div
+          <label
+            htmlFor="brush-color"
             className="w-8 h-8 rounded border border-border cursor-pointer"
             style={{ backgroundColor: settings.color }}
           />
@@ -246,7 +270,7 @@ function BrushSettings({ settings, onChange, isEraser }: BrushSettingsProps) {
             type="color"
             value={settings.color}
             onChange={(e) => onChange({ color: e.target.value })}
-            className="w-0 h-0 opacity-0"
+            className="sr-only"
             id="brush-color"
           />
         </div>

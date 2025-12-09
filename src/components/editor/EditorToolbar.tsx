@@ -14,7 +14,8 @@ import {
   Lasso,
   Square,
   Type,
-  Circle
+  Circle,
+  Crop
 } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
@@ -30,10 +31,10 @@ const tools: ToolConfig[] = [
   { id: 'select', icon: MousePointer2, label: 'Select', shortcut: 'V' },
   { id: 'magic-wand', icon: Wand2, label: 'Magic Wand', shortcut: 'W' },
   { id: 'lasso', icon: Lasso, label: 'Lasso', shortcut: 'L' },
-  { id: 'rectangle-select', icon: Square, label: 'Rectangle Select', shortcut: 'M' },
+  { id: 'rectangle-select', icon: Crop, label: 'Crop / Resize', shortcut: 'C' },
   { id: 'brush', icon: Paintbrush, label: 'Brush', shortcut: 'B' },
   { id: 'eraser', icon: Eraser, label: 'Eraser', shortcut: 'E' },
-  { id: 'move', icon: Move, label: 'Move', shortcut: 'V' },
+  { id: 'move', icon: Move, label: 'Move', shortcut: 'M' },
   { id: 'pan', icon: Hand, label: 'Pan', shortcut: 'H' },
   { id: 'zoom', icon: ZoomIn, label: 'Zoom', shortcut: 'Z' },
   { id: 'text', icon: Type, label: 'Text', shortcut: 'T' },
