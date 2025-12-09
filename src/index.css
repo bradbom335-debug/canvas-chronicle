@@ -2,95 +2,113 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
-All colors MUST be HSL.
-*/
+/* V3 Image Editor Design System - Professional Dark Theme */
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    /* Core surfaces - Deep charcoal foundation */
+    --background: 220 14% 10%;
+    --foreground: 210 20% 92%;
 
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    /* Card surfaces - Slightly elevated */
+    --card: 220 14% 12%;
+    --card-foreground: 210 20% 92%;
 
-    --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
+    /* Popover/Dropdown surfaces */
+    --popover: 220 14% 14%;
+    --popover-foreground: 210 20% 92%;
 
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
+    /* Primary - Cyan accent for selections and highlights */
+    --primary: 190 95% 50%;
+    --primary-foreground: 220 14% 8%;
+    --primary-glow: 190 95% 65%;
 
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
+    /* Secondary - Muted surface for panels */
+    --secondary: 220 14% 16%;
+    --secondary-foreground: 210 20% 85%;
 
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
+    /* Muted - Subdued elements */
+    --muted: 220 12% 20%;
+    --muted-foreground: 210 15% 55%;
 
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
+    /* Accent - Orange for warnings/important actions */
+    --accent: 32 95% 55%;
+    --accent-foreground: 220 14% 8%;
 
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
+    /* Destructive - Red for delete/remove */
+    --destructive: 0 72% 55%;
+    --destructive-foreground: 210 20% 98%;
 
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
+    /* Success - Green for confirmations */
+    --success: 142 72% 45%;
+    --success-foreground: 220 14% 8%;
 
+    /* Borders and inputs */
+    --border: 220 12% 22%;
+    --input: 220 12% 18%;
+    --ring: 190 95% 50%;
+
+    /* Border radius */
     --radius: 0.5rem;
 
-    --sidebar-background: 0 0% 98%;
+    /* Canvas specific tokens */
+    --canvas-bg: 220 14% 6%;
+    --canvas-grid: 220 12% 15%;
+    --canvas-selection: 190 95% 50%;
+    --canvas-selection-glow: 190 95% 50%;
+    
+    /* Panel tokens */
+    --panel-bg: 220 14% 11%;
+    --panel-border: 220 12% 18%;
+    --panel-header: 220 14% 14%;
+    
+    /* Toolbar tokens */
+    --toolbar-bg: 220 14% 9%;
+    --toolbar-active: 190 95% 50%;
+    --toolbar-hover: 220 12% 16%;
+    
+    /* Layer tokens */
+    --layer-selected: 190 30% 18%;
+    --layer-hover: 220 12% 14%;
+    --layer-drag: 190 50% 25%;
 
-    --sidebar-foreground: 240 5.3% 26.1%;
+    /* Sidebar tokens */
+    --sidebar-background: 220 14% 9%;
+    --sidebar-foreground: 210 20% 85%;
+    --sidebar-primary: 190 95% 50%;
+    --sidebar-primary-foreground: 220 14% 8%;
+    --sidebar-accent: 220 12% 16%;
+    --sidebar-accent-foreground: 210 20% 92%;
+    --sidebar-border: 220 12% 18%;
+    --sidebar-ring: 190 95% 50%;
 
-    --sidebar-primary: 240 5.9% 10%;
-
-    --sidebar-primary-foreground: 0 0% 98%;
-
-    --sidebar-accent: 240 4.8% 95.9%;
-
-    --sidebar-accent-foreground: 240 5.9% 10%;
-
-    --sidebar-border: 220 13% 91%;
-
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    /* Animation timings */
+    --transition-fast: 100ms;
+    --transition-normal: 200ms;
+    --transition-slow: 300ms;
   }
 
-  .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
-
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
-    --sidebar-background: 240 5.9% 10%;
-    --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 224.3 76.3% 48%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 3.7% 15.9%;
-    --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 240 3.7% 15.9%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
+  /* Light mode override (rarely used in image editors) */
+  .light {
+    --background: 0 0% 98%;
+    --foreground: 222 47% 11%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+    --primary: 190 95% 42%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 210 20% 94%;
+    --secondary-foreground: 222 47% 11%;
+    --muted: 210 20% 90%;
+    --muted-foreground: 215 16% 47%;
+    --accent: 32 95% 50%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 72% 50%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 214 32% 91%;
+    --input: 214 32% 91%;
+    --ring: 190 95% 42%;
   }
 }
 
@@ -100,6 +118,157 @@ All colors MUST be HSL.
   }
 
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+
+  /* Prevent text selection during canvas operations */
+  .no-select {
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  /* Canvas cursor states */
+  .cursor-crosshair { cursor: crosshair; }
+  .cursor-grab { cursor: grab; }
+  .cursor-grabbing { cursor: grabbing; }
+  .cursor-cell { cursor: cell; }
+  .cursor-move { cursor: move; }
+}
+
+@layer components {
+  /* Panel styling */
+  .panel {
+    @apply bg-panel-bg border border-panel-border rounded-lg shadow-xl;
+    backdrop-filter: blur(8px);
+  }
+  
+  .panel-header {
+    @apply bg-panel-header px-3 py-2 border-b border-panel-border text-sm font-medium text-muted-foreground;
+  }
+
+  /* Tool button styling */
+  .tool-button {
+    @apply w-10 h-10 flex items-center justify-center rounded-md transition-all duration-100;
+    @apply hover:bg-toolbar-hover text-muted-foreground;
+    @apply focus:outline-none focus:ring-2 focus:ring-ring/50;
+  }
+  
+  .tool-button.active {
+    @apply bg-primary/20 text-primary border border-primary/30;
+    box-shadow: 0 0 12px hsl(var(--primary) / 0.3);
+  }
+
+  /* Layer item styling */
+  .layer-item {
+    @apply flex items-center gap-2 px-2 py-1.5 rounded-md transition-colors;
+    @apply hover:bg-layer-hover cursor-pointer;
+  }
+  
+  .layer-item.selected {
+    @apply bg-layer-selected border border-primary/30;
+  }
+
+  /* Canvas container */
+  .canvas-container {
+    @apply relative overflow-hidden bg-canvas-bg;
+    background-image: 
+      linear-gradient(45deg, hsl(var(--canvas-grid)) 25%, transparent 25%),
+      linear-gradient(-45deg, hsl(var(--canvas-grid)) 25%, transparent 25%),
+      linear-gradient(45deg, transparent 75%, hsl(var(--canvas-grid)) 75%),
+      linear-gradient(-45deg, transparent 75%, hsl(var(--canvas-grid)) 75%);
+    background-size: 20px 20px;
+    background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+  }
+
+  /* Selection glow effect */
+  .selection-glow {
+    box-shadow: 0 0 20px hsl(var(--canvas-selection) / 0.5),
+                0 0 40px hsl(var(--canvas-selection) / 0.3),
+                inset 0 0 10px hsl(var(--canvas-selection) / 0.2);
+  }
+
+  /* Marching ants animation */
+  @keyframes marching-ants {
+    0% { stroke-dashoffset: 0; }
+    100% { stroke-dashoffset: 16; }
+  }
+  
+  .marching-ants {
+    animation: marching-ants 0.5s linear infinite;
+    stroke-dasharray: 8 8;
+  }
+
+  /* Pulse animation for active tools */
+  @keyframes tool-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+  }
+  
+  .tool-pulse {
+    animation: tool-pulse 2s ease-in-out infinite;
+  }
+
+  /* Wave expansion animation */
+  @keyframes wave-expand {
+    0% { transform: scale(0.8); opacity: 1; }
+    100% { transform: scale(1.2); opacity: 0; }
+  }
+  
+  .wave-expand {
+    animation: wave-expand 0.6s ease-out forwards;
+  }
+
+  /* Glow pulse for selection preview */
+  @keyframes glow-pulse {
+    0%, 100% { 
+      box-shadow: 0 0 8px hsl(var(--primary) / 0.4);
+    }
+    50% { 
+      box-shadow: 0 0 16px hsl(var(--primary) / 0.6);
+    }
+  }
+
+  .glow-pulse {
+    animation: glow-pulse 1.5s ease-in-out infinite;
+  }
+}
+
+@layer utilities {
+  /* Custom scrollbar for dark theme */
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--muted)) transparent;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background: hsl(var(--muted));
+    border-radius: 3px;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground));
+  }
+
+  /* Glass effect for floating panels */
+  .glass {
+    background: hsl(var(--panel-bg) / 0.85);
+    backdrop-filter: blur(12px);
+    border: 1px solid hsl(var(--border) / 0.5);
+  }
+
+  /* Inset shadow for canvas area */
+  .inset-canvas {
+    box-shadow: inset 0 2px 8px hsl(0 0% 0% / 0.4),
+                inset 0 0 2px hsl(0 0% 0% / 0.2);
   }
 }
