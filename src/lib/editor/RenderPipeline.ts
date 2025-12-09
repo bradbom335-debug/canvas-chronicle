@@ -1,4 +1,5 @@
 // V3 Image Editor - Render Pipeline (60fps Rendering)
+// FIXED: Consistent transform with CoordinateSystem
 
 import { Layer, SelectionMask, CANVAS_WIDTH, CANVAS_HEIGHT, Point } from '@/types/editor';
 import { CoordinateSystem } from './CoordinateSystem';
@@ -30,7 +31,6 @@ const DEFAULT_OPTIONS: RenderOptions = {
  */
 export class RenderPipeline {
   private ctx: CanvasRenderingContext2D;
-  private interactionCtx: CanvasRenderingContext2D | null = null;
   private coordSystem: CoordinateSystem;
   private options: RenderOptions;
   private checkerboardPattern: CanvasPattern | null = null;
@@ -49,10 +49,6 @@ export class RenderPipeline {
     this.createCheckerboardPattern();
   }
 
-  setInteractionCanvas(ctx: CanvasRenderingContext2D): void {
-    this.interactionCtx = ctx;
-  }
-
   // ============ MAIN RENDER LOOP ============
 
   render(
@@ -69,7 +65,7 @@ export class RenderPipeline {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
     
-    // Apply coordinate transform
+    // Apply coordinate transform (world space)
     this.coordSystem.applyTransform(ctx);
     
     // Draw background
@@ -89,15 +85,12 @@ export class RenderPipeline {
     }
     
     // Draw cursor indicator
-    if (cursorPosition) {
+    if (cursorPosition && this.coordSystem.isInBounds(cursorPosition.x, cursorPosition.y)) {
       this.drawCursorIndicator(cursorPosition);
     }
     
-    // Reset transform for UI elements
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    
-    // Draw grid
-    if (this.options.showGrid && this.coordSystem.zoom >= 4) {
+    // Draw pixel grid at high zoom
+    if (this.options.showGrid && this.coordSystem.zoom >= 8) {
       this.drawPixelGrid();
     }
     
@@ -129,7 +122,7 @@ export class RenderPipeline {
   private drawBackground(): void {
     const { ctx } = this;
     
-    // Fill with background color
+    // Fill with background color first
     ctx.fillStyle = this.options.backgroundColor;
     ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
     
@@ -140,8 +133,8 @@ export class RenderPipeline {
     }
     
     // Draw canvas border
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
-    ctx.lineWidth = 1 / this.coordSystem.zoom;
+    ctx.strokeStyle = 'rgba(0, 212, 255, 0.3)';
+    ctx.lineWidth = 2 / this.coordSystem.zoom;
     ctx.strokeRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
   }
 
@@ -150,7 +143,7 @@ export class RenderPipeline {
   private drawLayers(layers: Layer[]): void {
     const { ctx } = this;
     
-    // Filter to visible layers, sort by z-order (assuming array order)
+    // Filter to visible layers
     const visibleLayers = layers.filter(l => l.visible && l.imageData);
     
     for (const layer of visibleLayers) {
@@ -209,14 +202,10 @@ export class RenderPipeline {
     const { ctx } = this;
     const { mask, bounds, width } = selection;
     
-    // Create selection overlay
     ctx.save();
     
-    // Draw marching ants border
-    this.drawMarchingAnts(mask, bounds, width);
-    
     // Draw selection highlight
-    ctx.globalAlpha = 0.15;
+    ctx.globalAlpha = 0.2;
     ctx.fillStyle = '#00d4ff';
     
     for (let y = bounds.y; y < bounds.y + bounds.height; y++) {
@@ -228,6 +217,9 @@ export class RenderPipeline {
       }
     }
     
+    // Draw marching ants border
+    this.drawMarchingAnts(mask, bounds, width);
+    
     ctx.restore();
   }
 
@@ -237,42 +229,30 @@ export class RenderPipeline {
     maskWidth: number
   ): void {
     const { ctx } = this;
+    const lineWidth = 1 / this.coordSystem.zoom;
     
     ctx.save();
     ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 1 / this.coordSystem.zoom;
+    ctx.lineWidth = lineWidth;
     ctx.setLineDash([4 / this.coordSystem.zoom, 4 / this.coordSystem.zoom]);
-    ctx.lineDashOffset = this.marchingAntsOffset;
+    ctx.lineDashOffset = this.marchingAntsOffset / this.coordSystem.zoom;
     
-    // Find edge pixels and draw border
     ctx.beginPath();
     
     for (let y = bounds.y; y < bounds.y + bounds.height; y++) {
       for (let x = bounds.x; x < bounds.x + bounds.width; x++) {
         const maskIndex = y * maskWidth + x;
         if (mask[maskIndex] > 0) {
-          // Check neighbors for edges
+          // Check edges
           const top = y > 0 ? mask[(y - 1) * maskWidth + x] : 0;
           const bottom = y < CANVAS_HEIGHT - 1 ? mask[(y + 1) * maskWidth + x] : 0;
           const left = x > 0 ? mask[y * maskWidth + (x - 1)] : 0;
           const right = x < CANVAS_WIDTH - 1 ? mask[y * maskWidth + (x + 1)] : 0;
           
-          if (top === 0) {
-            ctx.moveTo(x, y);
-            ctx.lineTo(x + 1, y);
-          }
-          if (bottom === 0) {
-            ctx.moveTo(x, y + 1);
-            ctx.lineTo(x + 1, y + 1);
-          }
-          if (left === 0) {
-            ctx.moveTo(x, y);
-            ctx.lineTo(x, y + 1);
-          }
-          if (right === 0) {
-            ctx.moveTo(x + 1, y);
-            ctx.lineTo(x + 1, y + 1);
-          }
+          if (top === 0) { ctx.moveTo(x, y); ctx.lineTo(x + 1, y); }
+          if (bottom === 0) { ctx.moveTo(x, y + 1); ctx.lineTo(x + 1, y + 1); }
+          if (left === 0) { ctx.moveTo(x, y); ctx.lineTo(x, y + 1); }
+          if (right === 0) { ctx.moveTo(x + 1, y); ctx.lineTo(x + 1, y + 1); }
         }
       }
     }
@@ -286,7 +266,7 @@ export class RenderPipeline {
     const { mask, bounds, width } = preview;
     
     ctx.save();
-    ctx.globalAlpha = 0.35;
+    ctx.globalAlpha = 0.4;
     ctx.fillStyle = '#00d4ff';
     
     for (let y = bounds.y; y < bounds.y + bounds.height; y++) {
@@ -305,29 +285,29 @@ export class RenderPipeline {
 
   private drawCursorIndicator(position: Point): void {
     const { ctx } = this;
-    const size = 3 / this.coordSystem.zoom;
+    const size = 6 / this.coordSystem.zoom;
+    const lineWidth = 1.5 / this.coordSystem.zoom;
     
     ctx.save();
+    ctx.strokeStyle = '#00d4ff';
+    ctx.lineWidth = lineWidth;
     
     // Draw crosshair
-    ctx.strokeStyle = '#00d4ff';
-    ctx.lineWidth = 1 / this.coordSystem.zoom;
-    
     ctx.beginPath();
-    ctx.moveTo(position.x - size * 2, position.y);
-    ctx.lineTo(position.x - size, position.y);
-    ctx.moveTo(position.x + size, position.y);
-    ctx.lineTo(position.x + size * 2, position.y);
-    ctx.moveTo(position.x, position.y - size * 2);
-    ctx.lineTo(position.x, position.y - size);
-    ctx.moveTo(position.x, position.y + size);
-    ctx.lineTo(position.x, position.y + size * 2);
+    ctx.moveTo(position.x - size, position.y);
+    ctx.lineTo(position.x - size / 3, position.y);
+    ctx.moveTo(position.x + size / 3, position.y);
+    ctx.lineTo(position.x + size, position.y);
+    ctx.moveTo(position.x, position.y - size);
+    ctx.lineTo(position.x, position.y - size / 3);
+    ctx.moveTo(position.x, position.y + size / 3);
+    ctx.lineTo(position.x, position.y + size);
     ctx.stroke();
     
     // Draw center dot
     ctx.fillStyle = '#00d4ff';
     ctx.beginPath();
-    ctx.arc(position.x, position.y, 1 / this.coordSystem.zoom, 0, Math.PI * 2);
+    ctx.arc(position.x, position.y, 2 / this.coordSystem.zoom, 0, Math.PI * 2);
     ctx.fill();
     
     ctx.restore();
@@ -339,38 +319,21 @@ export class RenderPipeline {
     const { ctx } = this;
     const zoom = this.coordSystem.zoom;
     
-    if (zoom < 4) return; // Only show grid at high zoom
-    
     ctx.save();
-    this.coordSystem.applyTransform(ctx);
-    
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
-    ctx.lineWidth = 1 / zoom;
-    
-    // Calculate visible area
-    const topLeft = this.coordSystem.screenToWorld(0, 0);
-    const bottomRight = this.coordSystem.screenToWorld(
-      ctx.canvas.width / this.coordSystem.dpr,
-      ctx.canvas.height / this.coordSystem.dpr
-    );
-    
-    const startX = Math.max(0, Math.floor(topLeft.x));
-    const endX = Math.min(CANVAS_WIDTH, Math.ceil(bottomRight.x));
-    const startY = Math.max(0, Math.floor(topLeft.y));
-    const endY = Math.min(CANVAS_HEIGHT, Math.ceil(bottomRight.y));
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+    ctx.lineWidth = 0.5 / zoom;
     
     ctx.beginPath();
     
-    // Vertical lines
-    for (let x = startX; x <= endX; x++) {
-      ctx.moveTo(x, startY);
-      ctx.lineTo(x, endY);
+    // Draw grid lines
+    for (let x = 0; x <= CANVAS_WIDTH; x++) {
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, CANVAS_HEIGHT);
     }
     
-    // Horizontal lines
-    for (let y = startY; y <= endY; y++) {
-      ctx.moveTo(startX, y);
-      ctx.lineTo(endX, y);
+    for (let y = 0; y <= CANVAS_HEIGHT; y++) {
+      ctx.moveTo(0, y);
+      ctx.lineTo(CANVAS_WIDTH, y);
     }
     
     ctx.stroke();
