@@ -1,7 +1,7 @@
 // V3 Image Editor - Coordinate System (Single Source of Truth)
-// FIXED: Correct screen-to-world transformations matching render pipeline
+// DYNAMIC: Supports any image size, not fixed canvas dimensions
 
-import { Point, CANVAS_WIDTH, CANVAS_HEIGHT, MIN_ZOOM, MAX_ZOOM } from '@/types/editor';
+import { Point, MIN_ZOOM, MAX_ZOOM } from '@/types/editor';
 
 /**
  * CoordinateSystem - Manages all coordinate transformations
@@ -15,7 +15,7 @@ import { Point, CANVAS_WIDTH, CANVAS_HEIGHT, MIN_ZOOM, MAX_ZOOM } from '@/types/
  * The canvas renders with this transform (see applyTransform):
  * 1. Translate to center + pan
  * 2. Scale by zoom
- * 3. Translate back by half canvas size (centering the image)
+ * 3. Translate back by half image size (centering the image)
  * 
  * screenToWorld must reverse this exactly.
  */
@@ -24,6 +24,10 @@ export class CoordinateSystem {
   private _panX: number = 0;
   private _panY: number = 0;
   private _zoom: number = 1;
+  
+  // Dynamic image dimensions (set to actual loaded image size)
+  private _imageWidth: number = 1920;
+  private _imageHeight: number = 1080;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -35,6 +39,8 @@ export class CoordinateSystem {
   get panY(): number { return this._panY; }
   get zoom(): number { return this._zoom; }
   get dpr(): number { return window.devicePixelRatio || 1; }
+  get imageWidth(): number { return this._imageWidth; }
+  get imageHeight(): number { return this._imageHeight; }
 
   /** Viewport center in CSS pixels */
   get viewportCenterX(): number {
@@ -54,15 +60,21 @@ export class CoordinateSystem {
     this._zoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, zoom));
   }
 
+  /**
+   * Set image dimensions - call this when loading a new image
+   */
+  setImageSize(width: number, height: number): void {
+    this._imageWidth = width;
+    this._imageHeight = height;
+  }
+
   // ============ COORDINATE TRANSFORMATIONS ============
 
   /**
    * Screen → World coordinates (CSS pixels to image coordinates)
    * This is the PRIMARY transformation for user input
    * 
-   * Reverses the render transform:
-   * Render: world → translate(centerX + panX, centerY + panY) → scale(zoom) → translate(-CANVAS_WIDTH/2, -CANVAS_HEIGHT/2)
-   * Inverse: screen → undo translate → undo scale → undo center offset → world
+   * FIXED: Properly accounts for all transformations
    */
   screenToWorld(screenX: number, screenY: number): Point {
     const rect = this.canvas.getBoundingClientRect();
@@ -76,17 +88,12 @@ export class CoordinateSystem {
     const centerY = rect.height / 2;
     
     // Reverse the render transform:
-    // 1. The render translates by (centerX + panX, centerY + panY)
-    // 2. Then scales by zoom
-    // 3. Then translates by (-CANVAS_WIDTH/2, -CANVAS_HEIGHT/2)
-    //
-    // To reverse:
     // 1. Subtract the viewport center and pan
     // 2. Divide by zoom
     // 3. Add back the image center offset
     
-    const worldX = (canvasX - centerX - this._panX) / this._zoom + CANVAS_WIDTH / 2;
-    const worldY = (canvasY - centerY - this._panY) / this._zoom + CANVAS_HEIGHT / 2;
+    const worldX = (canvasX - centerX - this._panX) / this._zoom + this._imageWidth / 2;
+    const worldY = (canvasY - centerY - this._panY) / this._zoom + this._imageHeight / 2;
     
     return { x: worldX, y: worldY };
   }
@@ -99,13 +106,8 @@ export class CoordinateSystem {
     const centerX = rect.width / 2;
     const centerY = rect.height / 2;
     
-    // Apply the render transform:
-    // 1. Subtract image center
-    // 2. Scale by zoom  
-    // 3. Add viewport center + pan
-    
-    const screenX = (worldX - CANVAS_WIDTH / 2) * this._zoom + centerX + this._panX + rect.left;
-    const screenY = (worldY - CANVAS_HEIGHT / 2) * this._zoom + centerY + this._panY + rect.top;
+    const screenX = (worldX - this._imageWidth / 2) * this._zoom + centerX + this._panX + rect.left;
+    const screenY = (worldY - this._imageHeight / 2) * this._zoom + centerY + this._panY + rect.top;
     
     return { x: screenX, y: screenY };
   }
@@ -121,8 +123,8 @@ export class CoordinateSystem {
     const centerY = rect.height / 2 * dpr;
     
     return {
-      x: (worldX - CANVAS_WIDTH / 2) * this._zoom * dpr + centerX + this._panX * dpr,
-      y: (worldY - CANVAS_HEIGHT / 2) * this._zoom * dpr + centerY + this._panY * dpr,
+      x: (worldX - this._imageWidth / 2) * this._zoom * dpr + centerX + this._panX * dpr,
+      y: (worldY - this._imageHeight / 2) * this._zoom * dpr + centerY + this._panY * dpr,
     };
   }
 
@@ -130,24 +132,23 @@ export class CoordinateSystem {
 
   /**
    * World → Pixel Index
-   * Converts world coordinates to a flat array index
    */
-  worldToPixelIndex(worldX: number, worldY: number, width: number = CANVAS_WIDTH): number {
+  worldToPixelIndex(worldX: number, worldY: number): number {
     const x = Math.floor(worldX);
     const y = Math.floor(worldY);
-    if (x < 0 || x >= width || y < 0 || y >= CANVAS_HEIGHT) {
+    if (x < 0 || x >= this._imageWidth || y < 0 || y >= this._imageHeight) {
       return -1;
     }
-    return y * width + x;
+    return y * this._imageWidth + x;
   }
 
   /**
    * Pixel Index → World
    */
-  pixelIndexToWorld(index: number, width: number = CANVAS_WIDTH): Point {
+  pixelIndexToWorld(index: number): Point {
     return {
-      x: index % width,
-      y: Math.floor(index / width),
+      x: index % this._imageWidth,
+      y: Math.floor(index / this._imageWidth),
     };
   }
 
@@ -167,20 +168,20 @@ export class CoordinateSystem {
   // ============ BOUNDS CHECKING ============
 
   /**
-   * Check if world point is within canvas bounds
+   * Check if world point is within image bounds
    */
   isInBounds(worldX: number, worldY: number): boolean {
-    return worldX >= 0 && worldX < CANVAS_WIDTH && 
-           worldY >= 0 && worldY < CANVAS_HEIGHT;
+    return worldX >= 0 && worldX < this._imageWidth && 
+           worldY >= 0 && worldY < this._imageHeight;
   }
 
   /**
-   * Clamp world point to canvas bounds
+   * Clamp world point to image bounds
    */
   clampToBounds(point: Point): Point {
     return {
-      x: Math.max(0, Math.min(CANVAS_WIDTH - 1, point.x)),
-      y: Math.max(0, Math.min(CANVAS_HEIGHT - 1, point.y)),
+      x: Math.max(0, Math.min(this._imageWidth - 1, point.x)),
+      y: Math.max(0, Math.min(this._imageHeight - 1, point.y)),
     };
   }
 
@@ -188,10 +189,8 @@ export class CoordinateSystem {
 
   /**
    * Zoom around a specific screen point
-   * Keeps the point stationary on screen
    */
   zoomAroundPoint(screenX: number, screenY: number, newZoom: number): void {
-    // Get world point before zoom
     const worldPoint = this.screenToWorld(screenX, screenY);
     
     const oldZoom = this._zoom;
@@ -199,20 +198,14 @@ export class CoordinateSystem {
     
     if (this._zoom === oldZoom) return;
     
-    // After zoom, the same screen point should map to the same world point
-    // Solve for new pan values
     const rect = this.canvas.getBoundingClientRect();
     const canvasX = screenX - rect.left;
     const canvasY = screenY - rect.top;
     const centerX = rect.width / 2;
     const centerY = rect.height / 2;
     
-    // worldX = (canvasX - centerX - panX) / zoom + CANVAS_WIDTH / 2
-    // Solve for panX:
-    // panX = canvasX - centerX - (worldX - CANVAS_WIDTH / 2) * zoom
-    
-    this._panX = canvasX - centerX - (worldPoint.x - CANVAS_WIDTH / 2) * this._zoom;
-    this._panY = canvasY - centerY - (worldPoint.y - CANVAS_HEIGHT / 2) * this._zoom;
+    this._panX = canvasX - centerX - (worldPoint.x - this._imageWidth / 2) * this._zoom;
+    this._panY = canvasY - centerY - (worldPoint.y - this._imageHeight / 2) * this._zoom;
   }
 
   /**
@@ -223,8 +216,8 @@ export class CoordinateSystem {
     const availableWidth = rect.width - padding * 2;
     const availableHeight = rect.height - padding * 2;
     
-    const scaleX = availableWidth / CANVAS_WIDTH;
-    const scaleY = availableHeight / CANVAS_HEIGHT;
+    const scaleX = availableWidth / this._imageWidth;
+    const scaleY = availableHeight / this._imageHeight;
     
     this._zoom = Math.min(scaleX, scaleY, 1);
     this._panX = 0;
@@ -244,7 +237,6 @@ export class CoordinateSystem {
 
   /**
    * Apply current transform to canvas context
-   * This is what the render pipeline uses - screenToWorld must reverse this exactly
    */
   applyTransform(ctx: CanvasRenderingContext2D): void {
     const dpr = this.dpr;
@@ -260,7 +252,7 @@ export class CoordinateSystem {
     // 3. Offset so image (0,0) is at center
     ctx.translate(centerX + this._panX * dpr, centerY + this._panY * dpr);
     ctx.scale(this._zoom * dpr, this._zoom * dpr);
-    ctx.translate(-CANVAS_WIDTH / 2, -CANVAS_HEIGHT / 2);
+    ctx.translate(-this._imageWidth / 2, -this._imageHeight / 2);
   }
 
   /**
@@ -275,7 +267,7 @@ export class CoordinateSystem {
     const matrix = new DOMMatrix();
     matrix.translateSelf(centerX + this._panX * dpr, centerY + this._panY * dpr);
     matrix.scaleSelf(this._zoom * dpr, this._zoom * dpr);
-    matrix.translateSelf(-CANVAS_WIDTH / 2, -CANVAS_HEIGHT / 2);
+    matrix.translateSelf(-this._imageWidth / 2, -this._imageHeight / 2);
     
     return matrix;
   }

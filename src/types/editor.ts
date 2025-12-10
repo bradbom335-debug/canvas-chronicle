@@ -23,13 +23,17 @@ export interface Transform {
 }
 
 // ============ CANVAS CONSTANTS ============
-
-export const CANVAS_WIDTH = 1920;
-export const CANVAS_HEIGHT = 1080;
-export const MIN_ZOOM = 0.1;
-export const MAX_ZOOM = 10;
+// Default dimensions - actual canvas sizes to image
+export const DEFAULT_CANVAS_WIDTH = 1920;
+export const DEFAULT_CANVAS_HEIGHT = 1080;
+export const MIN_ZOOM = 0.01;
+export const MAX_ZOOM = 50;
 export const ZOOM_SPEED = 0.001;
 export const PAN_SPEED = 1;
+
+// Legacy exports for compatibility (use project.width/height instead)
+export const CANVAS_WIDTH = DEFAULT_CANVAS_WIDTH;
+export const CANVAS_HEIGHT = DEFAULT_CANVAS_HEIGHT;
 
 // ============ LAYER TYPES ============
 
@@ -155,6 +159,10 @@ export interface MagicWandSettings {
   edgeMode: boolean;
   contractExpand: number;
   smoothEdges: number;
+  // Expansion shape for animated preview
+  expansionShape: 'square' | 'circular' | 'diamond';
+  // Differential preview for smooth transitions
+  useDifferentialPreview: boolean;
 }
 
 export interface BrushSettings {
@@ -376,11 +384,11 @@ export function createMagicWandSettings(): MagicWandSettings {
     antiAlias: true,
     feather: 0,
     sampleAllLayers: true,
-    previewMode: 'fast',
+    previewMode: 'instant',
     previewQuality: 100,
     showMarchingAnts: true,
-    batchSize: 10000,
-    maxPixels: 500000,
+    batchSize: 20000,
+    maxPixels: 2000000,
     useWorker: false,
     connectivity: 4,
     colorSpace: 'rgb',
@@ -388,5 +396,7 @@ export function createMagicWandSettings(): MagicWandSettings {
     edgeMode: false,
     contractExpand: 0,
     smoothEdges: 0,
+    expansionShape: 'circular',
+    useDifferentialPreview: true,
   };
 }

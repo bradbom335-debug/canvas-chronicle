@@ -1,12 +1,12 @@
-// V3 Image Editor - Main Canvas Component with Fast Preview
+// V3 Image Editor - Main Canvas Component with Dynamic Sizing & Differential Preview
 
 import React, { useRef, useEffect, useCallback, useState } from 'react';
 import { useEditor } from '@/contexts/EditorContext';
 import { CoordinateSystem } from '@/lib/editor/CoordinateSystem';
 import { RenderPipeline } from '@/lib/editor/RenderPipeline';
-import { FastFloodFill, instantFloodFill, globalColorSelect } from '@/lib/editor/FastFloodFill';
+import { FastFloodFill, instantFloodFill, globalColorSelect, DifferentialPreview } from '@/lib/editor/FastFloodFill';
 import { LayerUtils } from '@/lib/editor/LayerUtils';
-import { Point, SelectionMask, CANVAS_WIDTH, CANVAS_HEIGHT } from '@/types/editor';
+import { Point, SelectionMask } from '@/types/editor';
 
 interface EditorCanvasProps {
   className?: string;
@@ -18,6 +18,7 @@ export function EditorCanvas({ className }: EditorCanvasProps) {
   const coordSystemRef = useRef<CoordinateSystem | null>(null);
   const renderPipelineRef = useRef<RenderPipeline | null>(null);
   const floodFillRef = useRef<FastFloodFill | null>(null);
+  const differentialPreviewRef = useRef<DifferentialPreview>(new DifferentialPreview());
   const animationFrameRef = useRef<number | null>(null);
   const lastPreviewPointRef = useRef<string>('');
   const compositeRef = useRef<ImageData | null>(null);
@@ -26,6 +27,7 @@ export function EditorCanvas({ className }: EditorCanvasProps) {
   const [cursorPosition, setCursorPosition] = useState<Point | null>(null);
   const [previewPixelCount, setPreviewPixelCount] = useState(0);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [imageDimensions, setImageDimensions] = useState({ width: 1920, height: 1080 });
   
   const {
     state,
@@ -97,9 +99,37 @@ export function EditorCanvas({ className }: EditorCanvasProps) {
     };
   }, []);
 
-  // Cache composite when layers change
+  // Update image dimensions and composite when layers change
   useEffect(() => {
     if (project.layers.length > 0) {
+      // Find the actual image dimensions from layers
+      let maxWidth = 0;
+      let maxHeight = 0;
+      
+      for (const layer of project.layers) {
+        if (layer.imageData) {
+          maxWidth = Math.max(maxWidth, layer.imageData.width);
+          maxHeight = Math.max(maxHeight, layer.imageData.height);
+        }
+      }
+      
+      if (maxWidth > 0 && maxHeight > 0) {
+        setImageDimensions({ width: maxWidth, height: maxHeight });
+        
+        // Update coordinate system with actual image size
+        if (coordSystemRef.current) {
+          coordSystemRef.current.setImageSize(maxWidth, maxHeight);
+          coordSystemRef.current.fitToView(50);
+        }
+        
+        // Update render pipeline image size
+        if (renderPipelineRef.current) {
+          (renderPipelineRef.current as any).imageWidth = maxWidth;
+          (renderPipelineRef.current as any).imageHeight = maxHeight;
+        }
+      }
+      
+      // Get composite at actual dimensions
       compositeRef.current = getCompositeImageData();
     } else {
       compositeRef.current = null;
@@ -127,7 +157,7 @@ export function EditorCanvas({ className }: EditorCanvasProps) {
 
   // ============ PREVIEW RENDERING ============
 
-  const drawPreviewMask = useCallback((mask: Uint8ClampedArray, bounds: { x: number; y: number; width: number; height: number }) => {
+  const drawPreviewMask = useCallback((mask: Uint8ClampedArray, width: number, height: number) => {
     const previewCanvas = previewCanvasRef.current;
     const coordSystem = coordSystemRef.current;
     if (!previewCanvas || !coordSystem) return;
@@ -135,27 +165,31 @@ export function EditorCanvas({ className }: EditorCanvasProps) {
     const ctx = previewCanvas.getContext('2d');
     if (!ctx) return;
     
+    const dpr = window.devicePixelRatio || 1;
+    
     // Clear preview canvas
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
     
     // Apply coordinate transform
     ctx.save();
     coordSystem.applyTransform(ctx);
     
-    // Create preview image data for the mask
-    const previewData = new ImageData(CANVAS_WIDTH, CANVAS_HEIGHT);
+    // Create preview image data at actual image size
+    const previewData = new ImageData(width, height);
     for (let i = 0; i < mask.length; i++) {
       if (mask[i] > 0) {
         const idx = i * 4;
+        const alpha = mask[i]; // Use mask value for alpha (supports fade out)
         previewData.data[idx] = 66;     // Primary color tint
         previewData.data[idx + 1] = 153;
         previewData.data[idx + 2] = 225;
-        previewData.data[idx + 3] = 100; // Semi-transparent
+        previewData.data[idx + 3] = Math.min(alpha, 120); // Semi-transparent
       }
     }
     
     // Draw to temp canvas then to preview
-    const tempCanvas = new OffscreenCanvas(CANVAS_WIDTH, CANVAS_HEIGHT);
+    const tempCanvas = new OffscreenCanvas(width, height);
     const tempCtx = tempCanvas.getContext('2d')!;
     tempCtx.putImageData(previewData, 0, 0);
     
@@ -168,8 +202,10 @@ export function EditorCanvas({ className }: EditorCanvasProps) {
     if (!previewCanvas) return;
     const ctx = previewCanvas.getContext('2d');
     if (ctx) {
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
     }
+    differentialPreviewRef.current.clear();
   }, []);
 
   // ============ EVENT HANDLERS ============
@@ -253,6 +289,15 @@ export function EditorCanvas({ className }: EditorCanvasProps) {
   const handleMagicWandHover = useCallback((worldPoint: Point) => {
     if (!compositeRef.current || project.layers.length === 0) return;
     
+    const composite = compositeRef.current;
+    const imgWidth = composite.width;
+    const imgHeight = composite.height;
+    
+    // Early bounds check
+    if (worldPoint.x < 0 || worldPoint.x >= imgWidth || worldPoint.y < 0 || worldPoint.y >= imgHeight) {
+      return;
+    }
+    
     const pointKey = `${Math.floor(worldPoint.x)}-${Math.floor(worldPoint.y)}`;
     if (pointKey === lastPreviewPointRef.current) return;
     lastPreviewPointRef.current = pointKey;
@@ -263,9 +308,8 @@ export function EditorCanvas({ className }: EditorCanvasProps) {
       animationFrameRef.current = null;
     }
     
-    const { previewMode, batchSize, maxPixels, tolerance, contiguous, connectivity } = toolSettings.magicWand;
+    const { previewMode, batchSize, maxPixels, tolerance, contiguous, connectivity, expansionShape, useDifferentialPreview } = toolSettings.magicWand;
     
-    // Preview off - just clear
     if (previewMode === 'off') {
       clearPreview();
       setPreviewPixelCount(0);
@@ -275,38 +319,46 @@ export function EditorCanvas({ className }: EditorCanvasProps) {
     const seedX = Math.floor(worldPoint.x);
     const seedY = Math.floor(worldPoint.y);
     
-    // Instant mode - compute everything immediately
+    // Instant mode
     if (previewMode === 'instant') {
       setIsProcessing(true);
       
+      let result: { mask: Uint8ClampedArray; pixelCount: number; width: number; height: number };
+      
       if (contiguous) {
-        const result = instantFloodFill(compositeRef.current, seedX, seedY, {
+        result = instantFloodFill(composite, seedX, seedY, {
           tolerance,
           contiguous: true,
           connectivity,
-          batchSize: 100000,
+          batchSize: 200000,
           maxPixels,
         });
-        drawPreviewMask(result.mask, result.bounds);
-        setPreviewPixelCount(result.pixelCount);
       } else {
-        const result = globalColorSelect(compositeRef.current, seedX, seedY, tolerance);
-        drawPreviewMask(result.mask, { x: 0, y: 0, width: CANVAS_WIDTH, height: CANVAS_HEIGHT });
-        setPreviewPixelCount(result.pixelCount);
+        result = globalColorSelect(composite, seedX, seedY, tolerance);
       }
       
+      // Apply differential preview for smooth transitions
+      if (useDifferentialPreview) {
+        const diff = differentialPreviewRef.current.update(result.mask, result.width, result.height);
+        drawPreviewMask(diff.displayMask, result.width, result.height);
+      } else {
+        drawPreviewMask(result.mask, result.width, result.height);
+      }
+      
+      setPreviewPixelCount(result.pixelCount);
       setIsProcessing(false);
       return;
     }
     
-    // Animated modes - use incremental fill
-    floodFillRef.current = new FastFloodFill(compositeRef.current);
+    // Animated modes
+    floodFillRef.current = new FastFloodFill(composite);
     floodFillRef.current.initialize(seedX, seedY, {
       tolerance,
       contiguous,
       connectivity,
-      batchSize: previewMode === 'fast' ? 20000 : 5000,
+      batchSize: previewMode === 'fast' ? 30000 : 8000,
       maxPixels,
+      expansionShape,
     });
     
     setIsProcessing(true);
@@ -316,10 +368,16 @@ export function EditorCanvas({ className }: EditorCanvasProps) {
       
       const complete = floodFillRef.current.processBatch();
       const mask = floodFillRef.current.getMask();
-      const bounds = floodFillRef.current.getBounds();
+      const width = floodFillRef.current.getWidth();
+      const height = floodFillRef.current.getHeight();
       
       if (mask) {
-        drawPreviewMask(mask, bounds);
+        if (useDifferentialPreview) {
+          const diff = differentialPreviewRef.current.update(mask, width, height);
+          drawPreviewMask(diff.displayMask, width, height);
+        } else {
+          drawPreviewMask(mask, width, height);
+        }
         setPreviewPixelCount(floodFillRef.current.getPixelCount());
       }
       
@@ -336,27 +394,37 @@ export function EditorCanvas({ className }: EditorCanvasProps) {
   const handleMagicWandClick = useCallback((worldPoint: Point, e: React.PointerEvent) => {
     if (!compositeRef.current || project.layers.length === 0) return;
     
+    const composite = compositeRef.current;
+    const imgWidth = composite.width;
+    const imgHeight = composite.height;
+    
     const { tolerance, contiguous, connectivity, maxPixels } = toolSettings.magicWand;
     const seedX = Math.floor(worldPoint.x);
     const seedY = Math.floor(worldPoint.y);
     
-    // Use instant fill for click (always want immediate result)
-    let result: { mask: Uint8ClampedArray; bounds: { x: number; y: number; width: number; height: number }; pixelCount: number };
+    // Bounds check
+    if (seedX < 0 || seedX >= imgWidth || seedY < 0 || seedY >= imgHeight) {
+      return;
+    }
+    
+    let result: { mask: Uint8ClampedArray; bounds: { x: number; y: number; width: number; height: number }; pixelCount: number; width: number; height: number };
     
     if (contiguous) {
-      result = instantFloodFill(compositeRef.current, seedX, seedY, {
+      result = instantFloodFill(composite, seedX, seedY, {
         tolerance,
         contiguous: true,
         connectivity,
-        batchSize: 100000,
+        batchSize: 200000,
         maxPixels,
       });
     } else {
-      const globalResult = globalColorSelect(compositeRef.current, seedX, seedY, tolerance);
+      const globalResult = globalColorSelect(composite, seedX, seedY, tolerance);
       result = {
         mask: globalResult.mask,
-        bounds: { x: 0, y: 0, width: CANVAS_WIDTH, height: CANVAS_HEIGHT },
+        bounds: { x: 0, y: 0, width: imgWidth, height: imgHeight },
         pixelCount: globalResult.pixelCount,
+        width: imgWidth,
+        height: imgHeight,
       };
     }
     
@@ -364,8 +432,8 @@ export function EditorCanvas({ className }: EditorCanvasProps) {
       id: crypto.randomUUID(),
       mask: result.mask,
       bounds: result.bounds,
-      width: CANVAS_WIDTH,
-      height: CANVAS_HEIGHT,
+      width: imgWidth,
+      height: imgHeight,
       pixels: new Set(),
       feathered: false,
       metadata: {
@@ -384,7 +452,7 @@ export function EditorCanvas({ className }: EditorCanvasProps) {
           activeLayer,
           result.mask,
           result.bounds,
-          CANVAS_WIDTH
+          imgWidth
         );
         if (newLayer) {
           addLayer(newLayer);
@@ -465,6 +533,7 @@ export function EditorCanvas({ className }: EditorCanvasProps) {
       {/* Status overlay */}
       <div className="absolute bottom-3 left-3 flex items-center gap-3 text-xs text-muted-foreground font-mono bg-background/80 px-2 py-1 rounded">
         <span>Zoom: {(canvasState.zoom * 100).toFixed(0)}%</span>
+        <span className="text-muted-foreground/60">{imageDimensions.width}×{imageDimensions.height}</span>
         {cursorPosition && (
           <span>
             {Math.floor(cursorPosition.x)}, {Math.floor(cursorPosition.y)}

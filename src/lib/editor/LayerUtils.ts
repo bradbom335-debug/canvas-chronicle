@@ -133,17 +133,27 @@ export const LayerUtils = {
 
   /**
    * Composite all visible layers into single ImageData
+   * Uses actual layer dimensions, not fixed canvas size
    */
   compositeLayers(layers: Layer[]): ImageData {
+    // Find max dimensions from layers
+    let maxWidth = 1920;
+    let maxHeight = 1080;
+    
+    for (const layer of layers) {
+      if (layer.imageData) {
+        maxWidth = Math.max(maxWidth, layer.bounds.x + layer.imageData.width);
+        maxHeight = Math.max(maxHeight, layer.bounds.y + layer.imageData.height);
+      }
+    }
+    
     const canvas = document.createElement('canvas');
-    canvas.width = CANVAS_WIDTH;
-    canvas.height = CANVAS_HEIGHT;
+    canvas.width = maxWidth;
+    canvas.height = maxHeight;
     const ctx = canvas.getContext('2d')!;
     
-    // Clear with transparent
-    ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+    ctx.clearRect(0, 0, maxWidth, maxHeight);
     
-    // Draw layers bottom to top
     const visibleLayers = layers.filter(l => l.visible && l.imageData);
     
     for (const layer of visibleLayers) {
@@ -153,14 +163,12 @@ export const LayerUtils = {
       ctx.globalAlpha = layer.opacity;
       ctx.globalCompositeOperation = getCompositeOperation(layer.blendMode);
       
-      // Apply transform
       const { bounds, transform } = layer;
       ctx.translate(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
       ctx.rotate(transform.rotation);
       ctx.scale(transform.sx, transform.sy);
       ctx.translate(-bounds.width / 2, -bounds.height / 2);
       
-      // Draw layer
       const tempCanvas = document.createElement('canvas');
       tempCanvas.width = layer.imageData.width;
       tempCanvas.height = layer.imageData.height;
@@ -171,7 +179,7 @@ export const LayerUtils = {
       ctx.restore();
     }
     
-    return ctx.getImageData(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+    return ctx.getImageData(0, 0, maxWidth, maxHeight);
   },
 
   /**
