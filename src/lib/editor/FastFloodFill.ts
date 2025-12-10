@@ -1,7 +1,7 @@
-// V3 Image Editor - Ultra-Fast Flood Fill with Instant Preview
-// Optimized for maximum speed with batch processing
+// V3 Image Editor - Ultra-Fast Flood Fill with Differential Preview
+// Features: Instant, expanding, circular expansion, differential updates
 
-import { Point, CANVAS_WIDTH, CANVAS_HEIGHT } from '@/types/editor';
+import { Point } from '@/types/editor';
 
 export interface FastFloodFillOptions {
   tolerance: number;
@@ -11,6 +11,7 @@ export interface FastFloodFillOptions {
   includeAlpha: boolean;
   batchSize: number;
   maxPixels: number;
+  expansionShape: 'square' | 'circular' | 'diamond';
 }
 
 export interface FloodFillState {
@@ -26,6 +27,9 @@ export interface FloodFillState {
   pixelCount: number;
   isComplete: boolean;
   seedColor: Uint8ClampedArray;
+  seedX: number;
+  seedY: number;
+  currentRing: number;
 }
 
 // Pixel states
@@ -36,7 +40,7 @@ const REJECTED = 3;
 
 /**
  * Ultra-fast flood fill using typed arrays and batch processing
- * Processes thousands of pixels per frame
+ * Supports circular expansion and differential preview updates
  */
 export class FastFloodFill {
   private imageData: ImageData;
@@ -44,7 +48,6 @@ export class FastFloodFill {
   private height: number;
   private data: Uint8ClampedArray;
   
-  // Pre-allocated buffers for performance
   private state: FloodFillState | null = null;
   private options: FastFloodFillOptions;
   
@@ -66,7 +69,8 @@ export class FastFloodFill {
       colorSpace: 'rgb',
       includeAlpha: false,
       batchSize: 10000,
-      maxPixels: 500000,
+      maxPixels: 2000000,
+      expansionShape: 'circular',
     };
   }
 
@@ -75,6 +79,10 @@ export class FastFloodFill {
    */
   initialize(seedX: number, seedY: number, options: Partial<FastFloodFillOptions> = {}): void {
     this.options = { ...this.options, ...options };
+    
+    // Clamp seed to bounds
+    seedX = Math.max(0, Math.min(this.width - 1, Math.floor(seedX)));
+    seedY = Math.max(0, Math.min(this.height - 1, Math.floor(seedY)));
     
     const size = this.width * this.height;
     const seedIndex = seedY * this.width + seedX;
@@ -101,6 +109,9 @@ export class FastFloodFill {
       pixelCount: 0,
       isComplete: false,
       seedColor,
+      seedX,
+      seedY,
+      currentRing: 0,
     };
     
     // Add seed to queue
@@ -109,15 +120,14 @@ export class FastFloodFill {
   }
 
   /**
-   * Process a batch of pixels - call this each frame
-   * Returns true when complete
+   * Process a batch of pixels with optional circular expansion
    */
   processBatch(batchSize?: number): boolean {
     if (!this.state || this.state.isComplete) return true;
     
     const batch = batchSize ?? this.options.batchSize;
-    const { tolerance, connectivity, maxPixels } = this.options;
-    const { mask, visited, queue, seedColor } = this.state;
+    const { tolerance, connectivity, maxPixels, expansionShape } = this.options;
+    const { mask, visited, queue, seedColor, seedX, seedY } = this.state;
     
     const dx = connectivity === 8 ? this.dx8 : this.dx4;
     const dy = connectivity === 8 ? this.dy8 : this.dy4;
@@ -133,11 +143,36 @@ export class FastFloodFill {
       
       const pixelIndex = queue[this.state.queueStart++];
       
-      // Skip if already processed
       if (visited[pixelIndex] >= ACCEPTED) continue;
       
       const x = pixelIndex % this.width;
       const y = (pixelIndex / this.width) | 0;
+      
+      // For circular expansion, check distance from seed
+      if (expansionShape === 'circular') {
+        const dx_seed = x - seedX;
+        const dy_seed = y - seedY;
+        const distSq = dx_seed * dx_seed + dy_seed * dy_seed;
+        const maxRing = this.state.currentRing + 50; // Process within current ring band
+        if (distSq > maxRing * maxRing && this.state.pixelCount > 100) {
+          // Re-queue for later processing
+          if (this.state.queueEnd < queue.length) {
+            queue[this.state.queueEnd++] = pixelIndex;
+          }
+          processed++;
+          continue;
+        }
+      } else if (expansionShape === 'diamond') {
+        const dist = Math.abs(x - seedX) + Math.abs(y - seedY);
+        const maxRing = this.state.currentRing + 50;
+        if (dist > maxRing && this.state.pixelCount > 100) {
+          if (this.state.queueEnd < queue.length) {
+            queue[this.state.queueEnd++] = pixelIndex;
+          }
+          processed++;
+          continue;
+        }
+      }
       
       // Check color similarity
       const colorIndex = pixelIndex * 4;
@@ -151,7 +186,6 @@ export class FastFloodFill {
       );
       
       if (dist <= tolerance) {
-        // Accept pixel
         visited[pixelIndex] = ACCEPTED;
         mask[pixelIndex] = 255;
         this.state.pixelCount++;
@@ -172,7 +206,9 @@ export class FastFloodFill {
             const neighborIndex = ny * this.width + nx;
             if (visited[neighborIndex] === UNSEEN) {
               visited[neighborIndex] = QUEUED;
-              queue[this.state.queueEnd++] = neighborIndex;
+              if (this.state.queueEnd < queue.length) {
+                queue[this.state.queueEnd++] = neighborIndex;
+              }
             }
           }
         }
@@ -182,7 +218,9 @@ export class FastFloodFill {
       }
     }
     
-    // Check if complete
+    // Expand ring for circular/diamond expansion
+    this.state.currentRing += 10;
+    
     if (this.state.queueStart >= this.state.queueEnd) {
       this.state.isComplete = true;
     }
@@ -195,22 +233,22 @@ export class FastFloodFill {
    */
   executeInstant(): void {
     if (!this.state) return;
-    while (!this.processBatch(50000)) {}
+    // For instant mode, use square expansion (fastest)
+    const originalShape = this.options.expansionShape;
+    this.options.expansionShape = 'square';
+    while (!this.processBatch(100000)) {}
+    this.options.expansionShape = originalShape;
   }
 
   /**
-   * Fast color distance using squared Euclidean (no sqrt for speed)
+   * Fast color distance using squared Euclidean
    */
   private colorDistanceFast(r1: number, g1: number, b1: number, r2: number, g2: number, b2: number): number {
     const dr = r1 - r2;
     const dg = g1 - g2;
     const db = b1 - b2;
-    // Return sqrt for proper comparison with tolerance
-    // Use fast approximation
     return Math.sqrt(dr * dr + dg * dg + db * db);
   }
-
-  // ============ GETTERS ============
 
   getMask(): Uint8ClampedArray | null {
     return this.state?.mask || null;
@@ -234,44 +272,46 @@ export class FastFloodFill {
     return this.state?.isComplete || false;
   }
 
-  getProgress(): number {
-    if (!this.state) return 0;
-    if (this.state.isComplete) return 1;
-    const totalQueued = this.state.queueEnd;
-    const processed = this.state.queueStart;
-    return totalQueued > 0 ? processed / totalQueued : 0;
+  getWidth(): number {
+    return this.width;
+  }
+
+  getHeight(): number {
+    return this.height;
   }
 }
 
 /**
- * Instant flood fill - non-animated, maximum speed
+ * Instant flood fill - maximum speed, non-animated
  */
 export function instantFloodFill(
   imageData: ImageData,
   seedX: number,
   seedY: number,
   options: Partial<FastFloodFillOptions> = {}
-): { mask: Uint8ClampedArray; bounds: { x: number; y: number; width: number; height: number }; pixelCount: number } {
+): { mask: Uint8ClampedArray; bounds: { x: number; y: number; width: number; height: number }; pixelCount: number; width: number; height: number } {
   const fill = new FastFloodFill(imageData);
-  fill.initialize(seedX, seedY, { ...options, batchSize: 100000 });
+  fill.initialize(seedX, seedY, { ...options, batchSize: 200000 });
   fill.executeInstant();
   
   return {
     mask: fill.getMask()!,
     bounds: fill.getBounds(),
     pixelCount: fill.getPixelCount(),
+    width: fill.getWidth(),
+    height: fill.getHeight(),
   };
 }
 
 /**
- * Global (non-contiguous) color selection - extremely fast
+ * Global (non-contiguous) color selection
  */
 export function globalColorSelect(
   imageData: ImageData,
   seedX: number,
   seedY: number,
   tolerance: number
-): { mask: Uint8ClampedArray; pixelCount: number } {
+): { mask: Uint8ClampedArray; pixelCount: number; width: number; height: number } {
   const width = imageData.width;
   const height = imageData.height;
   const data = imageData.data;
@@ -279,7 +319,9 @@ export function globalColorSelect(
   
   const mask = new Uint8ClampedArray(size);
   
-  // Get seed color
+  seedX = Math.max(0, Math.min(width - 1, Math.floor(seedX)));
+  seedY = Math.max(0, Math.min(height - 1, Math.floor(seedY)));
+  
   const seedIndex = (seedY * width + seedX) * 4;
   const sr = data[seedIndex];
   const sg = data[seedIndex + 1];
@@ -301,5 +343,93 @@ export function globalColorSelect(
     }
   }
   
-  return { mask, pixelCount };
+  return { mask, pixelCount, width, height };
+}
+
+/**
+ * Differential Preview Manager - maintains state between hovers for smooth transitions
+ */
+export class DifferentialPreview {
+  private previousMask: Uint8ClampedArray | null = null;
+  private previousWidth: number = 0;
+  private previousHeight: number = 0;
+  private displayMask: Uint8ClampedArray | null = null;
+  
+  /**
+   * Update with new mask, returning only the changed pixels
+   * Returns the full display mask for rendering
+   */
+  update(
+    newMask: Uint8ClampedArray,
+    width: number,
+    height: number
+  ): { displayMask: Uint8ClampedArray; addedPixels: number; removedPixels: number } {
+    const size = width * height;
+    
+    // First time or size changed - just use new mask
+    if (!this.previousMask || this.previousWidth !== width || this.previousHeight !== height) {
+      this.displayMask = new Uint8ClampedArray(newMask);
+      this.previousMask = new Uint8ClampedArray(newMask);
+      this.previousWidth = width;
+      this.previousHeight = height;
+      
+      let count = 0;
+      for (let i = 0; i < size; i++) {
+        if (newMask[i] > 0) count++;
+      }
+      
+      return { displayMask: this.displayMask, addedPixels: count, removedPixels: 0 };
+    }
+    
+    // Differential update - smooth blend
+    if (!this.displayMask) {
+      this.displayMask = new Uint8ClampedArray(size);
+    }
+    
+    let addedPixels = 0;
+    let removedPixels = 0;
+    
+    for (let i = 0; i < size; i++) {
+      const wasSelected = this.previousMask[i] > 0;
+      const isSelected = newMask[i] > 0;
+      
+      if (isSelected && !wasSelected) {
+        // Newly selected - fade in
+        this.displayMask[i] = 255;
+        addedPixels++;
+      } else if (!isSelected && wasSelected) {
+        // No longer selected - keep fading out (smooth)
+        this.displayMask[i] = Math.max(0, this.displayMask[i] - 60);
+        if (this.displayMask[i] === 0) removedPixels++;
+      } else if (isSelected) {
+        // Still selected - ensure full opacity
+        this.displayMask[i] = 255;
+      } else {
+        // Continue fading out old pixels
+        if (this.displayMask[i] > 0) {
+          this.displayMask[i] = Math.max(0, this.displayMask[i] - 60);
+        }
+      }
+    }
+    
+    // Store current as previous for next frame
+    this.previousMask.set(newMask);
+    
+    return { displayMask: this.displayMask, addedPixels, removedPixels };
+  }
+  
+  /**
+   * Clear all preview state
+   */
+  clear(): void {
+    this.previousMask = null;
+    this.displayMask = null;
+  }
+  
+  /**
+   * Get current display mask
+   */
+  getDisplayMask(): Uint8ClampedArray | null {
+    return this.displayMask;
+  }
 }
