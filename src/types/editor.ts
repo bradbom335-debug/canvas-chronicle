@@ -142,6 +142,19 @@ export interface MagicWandSettings {
   antiAlias: boolean;
   feather: number;
   sampleAllLayers: boolean;
+  // Advanced settings
+  previewMode: 'instant' | 'expanding' | 'fast' | 'off';
+  previewQuality: number;
+  showMarchingAnts: boolean;
+  batchSize: number;
+  maxPixels: number;
+  useWorker: boolean;
+  connectivity: 4 | 8;
+  colorSpace: 'rgb' | 'hsl' | 'lab';
+  includeAlpha: boolean;
+  edgeMode: boolean;
+  contractExpand: number;
+  smoothEdges: number;
 }
 
 export interface BrushSettings {
@@ -363,5 +376,17 @@ export function createMagicWandSettings(): MagicWandSettings {
     antiAlias: true,
     feather: 0,
     sampleAllLayers: true,
+    previewMode: 'fast',
+    previewQuality: 100,
+    showMarchingAnts: true,
+    batchSize: 10000,
+    maxPixels: 500000,
+    useWorker: false,
+    connectivity: 4,
+    colorSpace: 'rgb',
+    includeAlpha: false,
+    edgeMode: false,
+    contractExpand: 0,
+    smoothEdges: 0,
   };
 }

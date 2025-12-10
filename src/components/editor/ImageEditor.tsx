@@ -5,8 +5,8 @@ import { EditorProvider } from '@/contexts/EditorContext';
 import { EditorCanvas } from './EditorCanvas';
 import { EditorToolbar } from './EditorToolbar';
 import { EditorHeader } from './EditorHeader';
-import { LayersPanel } from './LayersPanel';
 import { ToolSettingsPanel } from './ToolSettingsPanel';
+import { RightPanelBar } from './RightPanelBar';
 
 export function ImageEditor() {
   return (
@@ -30,10 +30,8 @@ export function ImageEditor() {
             <EditorCanvas />
           </div>
           
-          {/* Right panel - Layers */}
-          <div className="w-64">
-            <LayersPanel />
-          </div>
+          {/* Right panel bar with drawers */}
+          <RightPanelBar />
         </div>
       </div>
     </EditorProvider>
