@@ -55,40 +55,47 @@ export const SegmentLayerUtils = {
   },
 
   /**
-   * Add segment to existing layer (merge overlaps)
+   * Add segment to existing layer (merge overlaps) - uses source image pixels
    */
   mergeSegmentIntoLayer(
     layer: Layer,
     newMask: Uint8ClampedArray,
     maskWidth: number,
-    maskHeight: number
-  ): Layer {
-    if (!layer.segmentMask || !layer.imageData) return layer;
+    maskHeight: number,
+    sourceImage: ImageData
+  ): Partial<Layer> {
+    if (!layer.segmentMask || !layer.imageData) return {};
     
     const mergedMask = new Uint8ClampedArray(layer.segmentMask);
-    const color = hexToRgb(layer.segmentColor || '#4ecdc4');
-    const opacity = layer.segmentGlow ? 180 : 100;
+    const tint = hexToRgb(layer.segmentColor || '#4ecdc4');
+    const mix = 0.35;
     
-    // Create new image data
+    // Create new image data preserving existing
     const newImageData = new ImageData(
       new Uint8ClampedArray(layer.imageData.data),
       layer.imageData.width,
       layer.imageData.height
     );
     
+    const srcData = sourceImage.data;
+    
     for (let i = 0; i < newMask.length; i++) {
       if (newMask[i] > 0) {
-        mergedMask[i] = 255; // Merge into mask
+        mergedMask[i] = 255;
         const idx = i * 4;
-        newImageData.data[idx] = color.r;
-        newImageData.data[idx + 1] = color.g;
-        newImageData.data[idx + 2] = color.b;
-        newImageData.data[idx + 3] = opacity;
+        const baseR = srcData[idx];
+        const baseG = srcData[idx + 1];
+        const baseB = srcData[idx + 2];
+        const baseA = srcData[idx + 3];
+        
+        newImageData.data[idx] = Math.round(baseR + (tint.r - baseR) * mix);
+        newImageData.data[idx + 1] = Math.round(baseG + (tint.g - baseG) * mix);
+        newImageData.data[idx + 2] = Math.round(baseB + (tint.b - baseB) * mix);
+        newImageData.data[idx + 3] = layer.segmentGlow ? baseA : Math.round(baseA * 0.9);
       }
     }
     
     return {
-      ...layer,
       imageData: newImageData,
       segmentMask: mergedMask,
       modifiedAt: Date.now(),

@@ -160,6 +160,9 @@ export function EditorCanvas({ className }: EditorCanvasProps) {
 
   // ============ PREVIEW RENDERING ============
 
+  // Stored preview mask for re-rendering during pan/zoom
+  const previewMaskRef = useRef<{ mask: Uint8ClampedArray; width: number; height: number } | null>(null);
+
   const drawPreviewMask = useCallback((mask: Uint8ClampedArray, width: number, height: number) => {
     const previewCanvas = previewCanvasRef.current;
     const coordSystem = coordSystemRef.current;
@@ -168,13 +171,14 @@ export function EditorCanvas({ className }: EditorCanvasProps) {
     const ctx = previewCanvas.getContext('2d');
     if (!ctx) return;
     
-    const dpr = window.devicePixelRatio || 1;
+    // Store for re-rendering during pan/zoom
+    previewMaskRef.current = { mask, width, height };
     
     // Clear preview canvas
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
     
-    // Apply coordinate transform
+    // Apply coordinate transform (same as main canvas)
     ctx.save();
     coordSystem.applyTransform(ctx);
     
@@ -183,11 +187,11 @@ export function EditorCanvas({ className }: EditorCanvasProps) {
     for (let i = 0; i < mask.length; i++) {
       if (mask[i] > 0) {
         const idx = i * 4;
-        const alpha = mask[i]; // Use mask value for alpha (supports fade out)
-        previewData.data[idx] = 66;     // Primary color tint
+        const alpha = mask[i];
+        previewData.data[idx] = 66;
         previewData.data[idx + 1] = 153;
         previewData.data[idx + 2] = 225;
-        previewData.data[idx + 3] = Math.min(alpha, 120); // Semi-transparent
+        previewData.data[idx + 3] = Math.min(alpha, 120);
       }
     }
     
@@ -200,6 +204,14 @@ export function EditorCanvas({ className }: EditorCanvasProps) {
     ctx.restore();
   }, []);
 
+  // Redraw preview when panning/zooming
+  const redrawPreview = useCallback(() => {
+    if (previewMaskRef.current) {
+      const { mask, width, height } = previewMaskRef.current;
+      drawPreviewMask(mask, width, height);
+    }
+  }, [drawPreviewMask]);
+
   const clearPreview = useCallback(() => {
     const previewCanvas = previewCanvasRef.current;
     if (!previewCanvas) return;
@@ -208,6 +220,7 @@ export function EditorCanvas({ className }: EditorCanvasProps) {
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
     }
+    previewMaskRef.current = null;
     differentialPreviewRef.current.clear();
   }, []);
 
@@ -264,6 +277,9 @@ export function EditorCanvas({ className }: EditorCanvasProps) {
       if (coordSystemRef.current) {
         coordSystemRef.current.setPan(panOffsetRef.current.x + dx, panOffsetRef.current.y + dy);
       }
+      
+      // Redraw preview overlay during pan
+      redrawPreview();
       render();
       return;
     }
@@ -271,7 +287,7 @@ export function EditorCanvas({ className }: EditorCanvasProps) {
     if (activeTool === 'magic-wand' && coordSystemRef.current.isInBounds(worldPoint.x, worldPoint.y)) {
       handleMagicWandHover(worldPoint);
     }
-  }, [activeTool, setPan, render]);
+  }, [activeTool, setPan, render, redrawPreview]);
 
   const handlePointerUp = useCallback((e: React.PointerEvent) => {
     const canvas = canvasRef.current;
@@ -304,6 +320,9 @@ export function EditorCanvas({ className }: EditorCanvasProps) {
       coordSystemRef.current.zoomAroundPoint(e.clientX, e.clientY, newZoom);
       setZoom(coordSystemRef.current.zoom);
       setPan(coordSystemRef.current.panX, coordSystemRef.current.panY);
+      
+      // Redraw preview overlay during zoom
+      redrawPreview();
       render();
       return;
     }
@@ -332,8 +351,10 @@ export function EditorCanvas({ className }: EditorCanvasProps) {
     setZoom(coordSystemRef.current.zoom);
     setPan(coordSystemRef.current.panX, coordSystemRef.current.panY);
     
+    // Redraw preview overlay during zoom
+    redrawPreview();
     render();
-  }, [canvasState.zoom, setZoom, setPan, render, activeTool, toolSettings.magicWand, updateToolSettings, cursorPosition]);
+  }, [canvasState.zoom, setZoom, setPan, render, redrawPreview, activeTool, toolSettings.magicWand, updateToolSettings, cursorPosition]);
 
   // ============ MAGIC WAND LOGIC ============
 
@@ -510,7 +531,8 @@ export function EditorCanvas({ className }: EditorCanvasProps) {
           shiftClickLayerRef.current,
           result.mask,
           imgWidth,
-          imgHeight
+          imgHeight,
+          compositeRef.current!
         );
         updateLayer(shiftClickLayerRef.current.id, mergedLayer);
       } else {

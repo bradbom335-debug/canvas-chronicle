@@ -1,0 +1,30 @@
+project_id = "ozzkpqzqvkwcjjmgdrna"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+port = 54322
+major_version = 15
+
+[studio]
+enabled = true
+port = 54323
+api_url = "http://127.0.0.1"
+
+[auth]
+enabled = true
+site_url = "http://127.0.0.1:3000"
+
+[functions.ai-chat]
+verify_jwt = false
+
+[functions.ai-vision]
+verify_jwt = false
+
+[functions.ai-generate-image]
+verify_jwt = false

@@ -10,7 +10,8 @@ import {
   Palette,
   Info,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Sparkles
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -19,8 +20,9 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sh
 import { LayersPanel } from './LayersPanel';
 import { AdvancedToolSettings } from './AdvancedToolSettings';
 import { AdvancedLayerSettings } from './AdvancedLayerSettings';
+import { AIPanel } from './AIPanel';
 
-type DrawerType = 'layers' | 'tool-advanced' | 'layer-advanced' | 'history' | 'colors' | 'info' | null;
+type DrawerType = 'layers' | 'tool-advanced' | 'layer-advanced' | 'history' | 'colors' | 'info' | 'ai' | null;
 
 interface PanelConfig {
   id: DrawerType;
@@ -33,6 +35,7 @@ const panels: PanelConfig[] = [
   { id: 'layers', icon: Layers, label: 'Layers', shortcut: 'L' },
   { id: 'tool-advanced', icon: SlidersHorizontal, label: 'Advanced Tool Settings', shortcut: 'T' },
   { id: 'layer-advanced', icon: Settings2, label: 'Advanced Layer Settings' },
+  { id: 'ai', icon: Sparkles, label: 'AI Assistant', shortcut: 'A' },
   { id: 'history', icon: History, label: 'History', shortcut: 'H' },
   { id: 'colors', icon: Palette, label: 'Color Palette', shortcut: 'C' },
   { id: 'info', icon: Info, label: 'Document Info', shortcut: 'I' },
@@ -54,6 +57,8 @@ export function RightPanelBar() {
         return <AdvancedToolSettings />;
       case 'layer-advanced':
         return <AdvancedLayerSettings />;
+      case 'ai':
+        return <AIPanel />;
       case 'history':
         return <HistoryPanel />;
       case 'colors':
