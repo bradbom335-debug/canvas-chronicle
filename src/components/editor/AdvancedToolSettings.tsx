@@ -8,8 +8,9 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { ChevronDown, Zap, Eye, Gauge, Waves } from 'lucide-react';
+import { ChevronDown, Zap, Eye, Gauge, Waves, Palette } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { ColorToleranceMap } from './ColorToleranceMap';
 
 export function AdvancedToolSettings() {
   const { state, updateToolSettings } = useEditor();
@@ -34,7 +35,20 @@ export function AdvancedToolSettings() {
   };
 
   return (
-    <div className="p-3 space-y-4">
+    <div className="p-3 space-y-4 max-h-[calc(100vh-120px)] overflow-y-auto">
+      {/* Color Tolerance Map - The Star Feature */}
+      <Collapsible defaultOpen>
+        <CollapsibleTrigger className="flex items-center gap-2 w-full text-left group">
+          <ChevronDown className="h-4 w-4 transition-transform group-data-[state=closed]:-rotate-90" />
+          <Palette className="h-4 w-4 text-purple-500" />
+          <span className="text-sm font-medium">Color Tolerance Map</span>
+        </CollapsibleTrigger>
+        <CollapsibleContent className="pt-3">
+          <ColorToleranceMap />
+        </CollapsibleContent>
+      </Collapsible>
+
+      <Separator />
       {/* Preview Mode Section */}
       <Collapsible defaultOpen>
         <CollapsibleTrigger className="flex items-center gap-2 w-full text-left group">
