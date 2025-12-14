@@ -15,24 +15,32 @@ export const SegmentLayerUtils = {
     maskWidth: number,
     maskHeight: number,
     existingSegmentColors: string[],
-    withGlow: boolean = false
+    withGlow: boolean = false,
+    sourceImage: ImageData,
   ): Layer {
     const segmentColor = getContrastingColor(existingSegmentColors);
-    
-    // Create ImageData with colored fill
+
+    // Create ImageData using underlying image pixels with a subtle tint
     const imageData = new ImageData(maskWidth, maskHeight);
-    const color = hexToRgb(segmentColor);
-    
+    const tint = hexToRgb(segmentColor);
+    const srcData = sourceImage.data;
+    const mix = 0.35; // how strong the tint is
+
     for (let i = 0; i < mask.length; i++) {
       if (mask[i] > 0) {
         const idx = i * 4;
-        imageData.data[idx] = color.r;
-        imageData.data[idx + 1] = color.g;
-        imageData.data[idx + 2] = color.b;
-        imageData.data[idx + 3] = withGlow ? 180 : 100; // Semi-transparent fill
+        const baseR = srcData[idx];
+        const baseG = srcData[idx + 1];
+        const baseB = srcData[idx + 2];
+        const baseA = srcData[idx + 3];
+
+        imageData.data[idx] = Math.round(baseR + (tint.r - baseR) * mix);
+        imageData.data[idx + 1] = Math.round(baseG + (tint.g - baseG) * mix);
+        imageData.data[idx + 2] = Math.round(baseB + (tint.b - baseB) * mix);
+        imageData.data[idx + 3] = withGlow ? baseA : Math.round(baseA * 0.9);
       }
     }
-    
+
     return createLayer({
       name: `Segment ${Date.now() % 10000}`,
       type: 'raster',
@@ -188,6 +196,66 @@ export const SegmentLayerUtils = {
     return colors;
   },
 };
+
+export function fillHolesInMask(mask: Uint8ClampedArray, width: number, height: number): Uint8ClampedArray {
+  const size = width * height;
+  const filled = new Uint8ClampedArray(mask);
+  const visited = new Uint8Array(size);
+  const queue = new Int32Array(size);
+  let head = 0;
+  let tail = 0;
+
+  const enqueue = (index: number) => {
+    visited[index] = 1;
+    queue[tail++] = index;
+  };
+
+  // Enqueue border pixels that are outside the selection
+  for (let x = 0; x < width; x++) {
+    const top = x;
+    const bottom = (height - 1) * width + x;
+    if (filled[top] === 0 && !visited[top]) enqueue(top);
+    if (filled[bottom] === 0 && !visited[bottom]) enqueue(bottom);
+  }
+  for (let y = 0; y < height; y++) {
+    const left = y * width;
+    const right = y * width + (width - 1);
+    if (filled[left] === 0 && !visited[left]) enqueue(left);
+    if (filled[right] === 0 && !visited[right]) enqueue(right);
+  }
+
+  const offsets = [
+    [-1, 0],
+    [1, 0],
+    [0, -1],
+    [0, 1],
+  ];
+
+  while (head < tail) {
+    const index = queue[head++];
+    const x = index % width;
+    const y = (index / width) | 0;
+
+    for (let i = 0; i < 4; i++) {
+      const nx = x + offsets[i][0];
+      const ny = y + offsets[i][1];
+      if (nx < 0 || nx >= width || ny < 0 || ny >= height) continue;
+      const nIndex = ny * width + nx;
+      if (filled[nIndex] === 0 && !visited[nIndex]) {
+        enqueue(nIndex);
+      }
+    }
+  }
+
+  // Any remaining zero pixels that were not reached are holes; fill them
+  for (let i = 0; i < size; i++) {
+    if (filled[i] === 0 && !visited[i]) {
+      filled[i] = 255;
+    }
+  }
+
+  return filled;
+}
 
 function hexToRgb(hex: string): { r: number; g: number; b: number } {
   // Handle HSL
