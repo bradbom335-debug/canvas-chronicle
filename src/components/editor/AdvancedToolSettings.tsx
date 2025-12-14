@@ -262,6 +262,14 @@ export function AdvancedToolSettings() {
               className="py-1"
             />
           </div>
+
+          <div className="flex items-center justify-between">
+            <Label className="text-xs">Fill Holes in Segments</Label>
+            <Switch
+              checked={wandSettings.fillHoles ?? true}
+              onCheckedChange={(v) => updateMagicWand({ fillHoles: v })}
+            />
+          </div>
         </CollapsibleContent>
       </Collapsible>
     </div>

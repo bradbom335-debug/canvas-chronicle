@@ -204,6 +204,8 @@ export interface MagicWandSettings {
   expansionShape: 'square' | 'circular' | 'diamond';
   // Differential preview for smooth transitions
   useDifferentialPreview: boolean;
+  // Post-processing
+  fillHoles: boolean;
 }
 
 export interface BrushSettings {
@@ -439,5 +441,6 @@ export function createMagicWandSettings(): MagicWandSettings {
     smoothEdges: 0,
     expansionShape: 'circular',
     useDifferentialPreview: true,
+    fillHoles: true,
   };
 }
