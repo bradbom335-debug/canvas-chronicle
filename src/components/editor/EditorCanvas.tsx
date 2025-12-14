@@ -6,7 +6,8 @@ import { CoordinateSystem } from '@/lib/editor/CoordinateSystem';
 import { RenderPipeline } from '@/lib/editor/RenderPipeline';
 import { FastFloodFill, instantFloodFill, globalColorSelect, DifferentialPreview } from '@/lib/editor/FastFloodFill';
 import { LayerUtils } from '@/lib/editor/LayerUtils';
-import { Point, SelectionMask } from '@/types/editor';
+import { SegmentLayerUtils } from '@/lib/editor/SegmentLayerUtils';
+import { Point, SelectionMask, Layer } from '@/types/editor';
 
 interface EditorCanvasProps {
   className?: string;
@@ -37,6 +38,8 @@ export function EditorCanvas({ className }: EditorCanvasProps) {
     setSelection,
     setHoverPreview,
     addLayer,
+    updateLayer,
+    updateToolSettings,
     getCompositeImageData,
   } = useEditor();
   
@@ -213,12 +216,25 @@ export function EditorCanvas({ className }: EditorCanvasProps) {
   const isPanningRef = useRef(false);
   const panStartRef = useRef({ x: 0, y: 0 });
   const panOffsetRef = useRef({ x: 0, y: 0 });
+  const isRightClickRef = useRef(false);
+  const shiftClickLayerRef = useRef<Layer | null>(null);
 
   const handlePointerDown = useCallback((e: React.PointerEvent) => {
     const canvas = canvasRef.current;
     if (!canvas || !coordSystemRef.current) return;
     
     canvas.setPointerCapture(e.pointerId);
+    
+    // Right-click drag = pan canvas
+    if (e.button === 2) {
+      e.preventDefault();
+      isPanningRef.current = true;
+      isRightClickRef.current = true;
+      panStartRef.current = { x: e.clientX, y: e.clientY };
+      panOffsetRef.current = { x: canvasState.panX, y: canvasState.panY };
+      setCanvasMode('panning');
+      return;
+    }
     
     if (e.button === 1 || activeTool === 'pan') {
       isPanningRef.current = true;
@@ -265,7 +281,13 @@ export function EditorCanvas({ className }: EditorCanvasProps) {
     
     if (isPanningRef.current) {
       isPanningRef.current = false;
+      isRightClickRef.current = false;
       setCanvasMode('idle');
+    }
+    
+    // Clear shift-click layer when shift is released
+    if (!e.shiftKey) {
+      shiftClickLayerRef.current = null;
     }
   }, [setCanvasMode]);
 
@@ -274,6 +296,35 @@ export function EditorCanvas({ className }: EditorCanvasProps) {
     
     if (!coordSystemRef.current) return;
     
+    // Right-click held + scroll = zoom
+    if (isRightClickRef.current || e.buttons === 2) {
+      const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
+      const newZoom = canvasState.zoom * zoomFactor;
+      
+      coordSystemRef.current.zoomAroundPoint(e.clientX, e.clientY, newZoom);
+      setZoom(coordSystemRef.current.zoom);
+      setPan(coordSystemRef.current.panX, coordSystemRef.current.panY);
+      render();
+      return;
+    }
+    
+    // Magic wand tool: scroll = adjust tolerance
+    if (activeTool === 'magic-wand') {
+      const delta = e.deltaY > 0 ? -2 : 2;
+      const newTolerance = Math.max(0, Math.min(255, toolSettings.magicWand.tolerance + delta));
+      updateToolSettings({
+        magicWand: { ...toolSettings.magicWand, tolerance: newTolerance }
+      });
+      
+      // Re-trigger hover preview with new tolerance
+      if (cursorPosition) {
+        lastPreviewPointRef.current = ''; // Force refresh
+        handleMagicWandHover(cursorPosition);
+      }
+      return;
+    }
+    
+    // Default: zoom
     const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
     const newZoom = canvasState.zoom * zoomFactor;
     
@@ -282,7 +333,7 @@ export function EditorCanvas({ className }: EditorCanvasProps) {
     setPan(coordSystemRef.current.panX, coordSystemRef.current.panY);
     
     render();
-  }, [canvasState.zoom, setZoom, setPan, render]);
+  }, [canvasState.zoom, setZoom, setPan, render, activeTool, toolSettings.magicWand, updateToolSettings, cursorPosition]);
 
   // ============ MAGIC WAND LOGIC ============
 
@@ -428,43 +479,76 @@ export function EditorCanvas({ className }: EditorCanvasProps) {
       };
     }
     
-    const selectionMask: SelectionMask = {
-      id: crypto.randomUUID(),
-      mask: result.mask,
-      bounds: result.bounds,
-      width: imgWidth,
-      height: imgHeight,
-      pixels: new Set(),
-      feathered: false,
-      metadata: {
-        seedPoint: worldPoint,
-        tolerance,
-        pixelCount: result.pixelCount,
-        createdAt: Date.now(),
-      },
-    };
-    
-    // Alt-click: Create layer from selection
+    // Alt+Click: Create transparency modifier (cuts pixels from layer)
     if (e.altKey) {
       const activeLayer = project.layers.find(l => l.id === project.activeLayerId) || project.layers[0];
-      if (activeLayer) {
-        const newLayer = LayerUtils.extractPixelsWithMask(
-          activeLayer,
+      if (activeLayer && !activeLayer.isSegmentLayer) {
+        const modifier = SegmentLayerUtils.createTransparencyModifier(
           result.mask,
           result.bounds,
-          imgWidth
+          imgWidth,
+          imgHeight
         );
-        if (newLayer) {
-          addLayer(newLayer);
-        }
+        
+        // Add modifier to layer
+        updateLayer(activeLayer.id, {
+          modifiers: [...activeLayer.modifiers, modifier],
+          isModifierHost: true,
+        });
+        
+        clearPreview();
+        render();
+        return;
       }
-    } else {
-      setSelection(selectionMask);
     }
+    
+    // Shift+Click: Add to existing segment layer OR create new with special style
+    if (e.shiftKey) {
+      // Check if we have an existing shift-click layer to add to
+      if (shiftClickLayerRef.current && shiftClickLayerRef.current.isSegmentLayer) {
+        const mergedLayer = SegmentLayerUtils.mergeSegmentIntoLayer(
+          shiftClickLayerRef.current,
+          result.mask,
+          imgWidth,
+          imgHeight
+        );
+        updateLayer(shiftClickLayerRef.current.id, mergedLayer);
+      } else {
+        // Create new segment layer with glow effect
+        const neighborColors = SegmentLayerUtils.getNeighboringSegmentColors(project.layers, result.bounds);
+        const segmentLayer = SegmentLayerUtils.createSegmentLayer(
+          result.mask,
+          result.bounds,
+          imgWidth,
+          imgHeight,
+          neighborColors,
+          true // withGlow = true for shift+click
+        );
+        addLayer(segmentLayer);
+        shiftClickLayerRef.current = segmentLayer;
+      }
+      
+      clearPreview();
+      render();
+      return;
+    }
+    
+    // Normal left-click: Create segment layer with unique color fill
+    const neighborColors = SegmentLayerUtils.getNeighboringSegmentColors(project.layers, result.bounds);
+    const segmentLayer = SegmentLayerUtils.createSegmentLayer(
+      result.mask,
+      result.bounds,
+      imgWidth,
+      imgHeight,
+      neighborColors,
+      false // withGlow = false for normal click
+    );
+    addLayer(segmentLayer);
+    shiftClickLayerRef.current = null; // Reset shift-click layer
     
     clearPreview();
     render();
-  }, [project, toolSettings.magicWand, addLayer, setSelection, clearPreview, render]);
+  }, [project, toolSettings.magicWand, addLayer, updateLayer, clearPreview, render]);
 
   // ============ KEYBOARD SHORTCUTS ============
 
@@ -522,6 +606,7 @@ export function EditorCanvas({ className }: EditorCanvasProps) {
           lastPreviewPointRef.current = '';
         }}
         onWheel={handleWheel}
+        onContextMenu={(e) => e.preventDefault()}
       />
       
       {/* Preview overlay canvas */}
