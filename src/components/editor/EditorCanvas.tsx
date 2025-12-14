@@ -522,7 +522,8 @@ export function EditorCanvas({ className }: EditorCanvasProps) {
           imgWidth,
           imgHeight,
           neighborColors,
-          true // withGlow = true for shift+click
+          true, // withGlow = true for shift+click
+          compositeRef.current!
         );
         addLayer(segmentLayer);
         shiftClickLayerRef.current = segmentLayer;
@@ -541,7 +542,8 @@ export function EditorCanvas({ className }: EditorCanvasProps) {
       imgWidth,
       imgHeight,
       neighborColors,
-      false // withGlow = false for normal click
+      false, // withGlow = false for normal click
+      compositeRef.current!
     );
     addLayer(segmentLayer);
     shiftClickLayerRef.current = null; // Reset shift-click layer
