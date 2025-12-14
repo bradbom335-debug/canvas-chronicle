@@ -68,6 +68,15 @@ export interface Layer {
   children: string[];
   createdAt: number;
   modifiedAt: number;
+  // Segment layer properties
+  isSegmentLayer?: boolean;
+  segmentColor?: string;
+  segmentGlow?: boolean;
+  segmentMask?: Uint8ClampedArray;
+  segmentBounds?: Rectangle;
+  // Modifier layer expansion
+  isModifierHost?: boolean;
+  modifierLayerIds?: string[];
 }
 
 // ============ MODIFIER TYPES ============
@@ -93,8 +102,40 @@ export interface Modifier {
 export interface TransparencyMaskParams {
   mask: Uint8ClampedArray;
   bounds: Rectangle;
+  width: number;
+  height: number;
   feather: number;
   invert: boolean;
+}
+
+// Segment layer for colored segment visualization
+export interface SegmentLayer extends Layer {
+  segmentColor: string;
+  segmentGlow: boolean;
+  segmentMask: Uint8ClampedArray;
+  segmentBounds: Rectangle;
+  segmentWidth: number;
+  segmentHeight: number;
+}
+
+// Color generator for unique segment colors
+export const SEGMENT_COLORS = [
+  '#ff6b6b', '#4ecdc4', '#45b7d1', '#f7dc6f', '#bb8fce',
+  '#85c1e9', '#f8b500', '#16a085', '#e74c3c', '#9b59b6',
+  '#3498db', '#1abc9c', '#f39c12', '#d35400', '#27ae60',
+  '#8e44ad', '#2980b9', '#c0392b', '#7f8c8d', '#2c3e50',
+];
+
+export function getContrastingColor(existingColors: string[]): string {
+  // Find a color that contrasts with existing neighbors
+  for (const color of SEGMENT_COLORS) {
+    if (!existingColors.includes(color)) {
+      return color;
+    }
+  }
+  // Fallback: random hue
+  const hue = Math.floor(Math.random() * 360);
+  return `hsl(${hue}, 70%, 60%)`;
 }
 
 // ============ SELECTION TYPES ============
